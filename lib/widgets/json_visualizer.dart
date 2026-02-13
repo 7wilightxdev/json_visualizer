@@ -24,10 +24,10 @@ class JsonVisualizerColors {
   final Color icon;
 }
 
-/// A visualizer widget for displaying JSON Maps with expand/collapse,
+/// A visualizer widget for displaying JSON data with expand/collapse,
 /// syntax highlighting, and per-node copy.
-class JsonVisualizerView extends StatelessWidget {
-  const JsonVisualizerView({
+class JsonVisualizer extends StatelessWidget {
+  const JsonVisualizer({
     super.key,
     required this.data,
     this.colors = const JsonVisualizerColors(),
@@ -49,6 +49,11 @@ class JsonVisualizerView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    dynamic decodedData = data;
+    if (data is String) {
+      safeTry(() => decodedData = jsonDecode(data));
+    }
+
     return _ConfigScope(
       colors: colors,
       fontSize: fontSize,
@@ -57,12 +62,19 @@ class JsonVisualizerView extends StatelessWidget {
       onCopied: onCopied,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: _CollapsibleNode(
-          nodeKey: null,
-          value: data,
-          depth: 0,
-          isLast: true,
-        ),
+        child: decodedData is Map || decodedData is List
+            ? _CollapsibleNode(
+                nodeKey: null,
+                value: decodedData,
+                depth: 0,
+                isLast: true,
+              )
+            : _LeafNode(
+                nodeKey: null,
+                value: decodedData,
+                depth: 0,
+                isLast: true,
+              ),
       ),
     );
   }
@@ -92,11 +104,7 @@ class _ConfigScope extends InheritedWidget {
     return context.dependOnInheritedWidgetOfExactType<_ConfigScope>()!;
   }
 
-  TextStyle get _baseStyle => TextStyle(
-        fontFamily: 'monospace',
-        fontSize: fontSize,
-        height: 1.5,
-      );
+  TextStyle get textStyle => TextStyle(fontFamily: 'monospace', fontSize: fontSize, height: 1.5);
 
   @override
   bool updateShouldNotify(_ConfigScope oldWidget) {
@@ -114,11 +122,12 @@ class _ConfigScope extends InheritedWidget {
 
 class _CollapsibleNode extends StatefulWidget {
   const _CollapsibleNode({
+    super.key,
     required this.nodeKey,
     required this.value,
     required this.depth,
     required this.isLast,
-  });
+  }) : assert(value is Map || value is List, 'Value must be a Map or List');
 
   /// The key label (null for root node).
   final String? nodeKey;
@@ -136,15 +145,20 @@ class _CollapsibleNode extends StatefulWidget {
 class _CollapsibleNodeState extends State<_CollapsibleNode> {
   bool? _expanded;
 
+  static const int _pageSize = 100;
+  int _displayCount = _pageSize;
+
   bool get _isMap => widget.value is Map;
   String get _openBracket => _isMap ? '{' : '[';
   String get _closeBracket => _isMap ? '}' : ']';
-  int get _childCount => _isMap ? (widget.value as Map).length : (widget.value as List).length;
   String get _comma => widget.isLast ? '' : ',';
+  int get _childCount => widget.value.length;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // ??= ensures initial expand state is set only once,
+    // preserving user toggle when parent rebuilds.
     _expanded ??= widget.depth < _ConfigScope.of(context).expandDepth;
   }
 
@@ -166,7 +180,7 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
   Widget build(BuildContext context) {
     final config = _ConfigScope.of(context);
 
-    // Empty collection → render as leaf
+    // Empty collection → render as leaf {} or []
     if (_childCount == 0) {
       return _LeafNode(
         nodeKey: widget.nodeKey,
@@ -176,25 +190,18 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
       );
     }
 
-    if (!_expanded!) {
-      return _buildCollapsedRow(config);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildExpandedHeader(config),
-        ..._buildChildren(config),
-        _buildClosingBracket(config),
-      ],
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 150),
+      alignment: Alignment.topLeft,
+      curve: Curves.easeOut,
+      child: _expanded! ? _buildExpandView(config) : _buildCollapsedView(config),
     );
   }
 
-  Widget _buildCollapsedRow(_ConfigScope config) {
+  Widget _buildCollapsedView(_ConfigScope config) {
     final summary = _isMap ? '$_childCount fields' : '$_childCount items';
 
-    final content = Padding(
+    return Padding(
       padding: EdgeInsets.only(left: widget.depth * config.indentWidth),
       child: GestureDetector(
         onTap: () => setState(() => _expanded = true),
@@ -209,17 +216,17 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
                 children: [
                   if (widget.nodeKey != null) ...[
                     TextSpan(
-                      text: '"${widget.nodeKey}"',
-                      style: config._baseStyle.copyWith(color: config.colors.key),
+                      text: jsonEncode(widget.nodeKey),
+                      style: config.textStyle.copyWith(color: config.colors.key),
                     ),
                     TextSpan(
                       text: ': ',
-                      style: config._baseStyle.copyWith(color: config.colors.bracket),
+                      style: config.textStyle.copyWith(color: config.colors.bracket),
                     ),
                   ],
                   TextSpan(
                     text: '$_openBracket $summary $_closeBracket$_comma',
-                    style: config._baseStyle.copyWith(color: config.colors.bracket),
+                    style: config.textStyle.copyWith(color: config.colors.bracket),
                   ),
                 ],
               ),
@@ -227,13 +234,23 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
           ],
         ),
       ),
-    );
+    ).withIndentGuides(widget.depth, config);
+  }
 
-    return _withGuides(widget.depth, config, content);
+  Widget _buildExpandView(_ConfigScope config) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildExpandedHeader(config),
+        ..._buildChildren(config),
+        _buildClosingBracket(config),
+      ],
+    );
   }
 
   Widget _buildExpandedHeader(_ConfigScope config) {
-    final content = Padding(
+    return Padding(
       padding: EdgeInsets.only(left: widget.depth * config.indentWidth),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -251,17 +268,17 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
                     children: [
                       if (widget.nodeKey != null) ...[
                         TextSpan(
-                          text: '"${widget.nodeKey}"',
-                          style: config._baseStyle.copyWith(color: config.colors.key),
+                          text: jsonEncode(widget.nodeKey),
+                          style: config.textStyle.copyWith(color: config.colors.key),
                         ),
                         TextSpan(
                           text: ': ',
-                          style: config._baseStyle.copyWith(color: config.colors.bracket),
+                          style: config.textStyle.copyWith(color: config.colors.bracket),
                         ),
                       ],
                       TextSpan(
                         text: _openBracket,
-                        style: config._baseStyle.copyWith(color: config.colors.bracket),
+                        style: config.textStyle.copyWith(color: config.colors.bracket),
                       ),
                     ],
                   ),
@@ -282,50 +299,71 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
           ],
         ],
       ),
-    );
-
-    return _withGuides(widget.depth, config, content);
+    ).withIndentGuides(widget.depth, config);
   }
 
   List<Widget> _buildChildren(_ConfigScope config) {
     final entries = _entries;
-    return List.generate(entries.length, (i) {
+    // Only render up to _displayCount children for large collections
+    final count = entries.length.clamp(0, _displayCount);
+
+    final children = List.generate(count, (i) {
       final entry = entries[i];
       final isLast = i == entries.length - 1;
       final childValue = entry.value;
-      final childKey = _isMap ? entry.key : null;
-
-      if ((childValue is Map && childValue.isNotEmpty) ||
-          (childValue is List && childValue.isNotEmpty)) {
-        return _CollapsibleNode(
-          nodeKey: childKey,
-          value: childValue is Map ? Map<String, dynamic>.from(childValue) : childValue,
-          depth: widget.depth + 1,
-          isLast: isLast,
-        );
-      }
-
-      return _LeafNode(
-        nodeKey: childKey,
-        value: childValue,
-        depth: widget.depth + 1,
-        isLast: isLast,
-      );
+      final childKey = _isMap ? entry.key : null; // List index is not displayed
+      return childValue is Map || childValue is List
+          ? _CollapsibleNode(
+              key: ValueKey(entry.key),
+              nodeKey: childKey,
+              value: childValue,
+              depth: widget.depth + 1,
+              isLast: isLast,
+            )
+          : _LeafNode(
+              key: ValueKey(entry.key),
+              nodeKey: childKey,
+              value: childValue,
+              depth: widget.depth + 1,
+              isLast: isLast,
+            );
     });
+
+    // "Show more" button for paginated rendering
+    if (count < entries.length) {
+      final remaining = entries.length - count;
+      children.add(
+        Padding(
+          padding: EdgeInsets.only(
+            left: (widget.depth + 1) * config.indentWidth + 18,
+          ),
+          child: GestureDetector(
+            onTap: () => setState(() => _displayCount += _pageSize),
+            child: Text(
+              '... $remaining more items',
+              style: config.textStyle.copyWith(
+                color: config.colors.icon,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ).withIndentGuides(widget.depth + 1, config),
+      );
+    }
+
+    return children;
   }
 
   Widget _buildClosingBracket(_ConfigScope config) {
-    final content = Padding(
+    return Padding(
       padding: EdgeInsets.only(
         left: widget.depth * config.indentWidth + 18,
       ),
       child: Text(
         '$_closeBracket$_comma',
-        style: config._baseStyle.copyWith(color: config.colors.bracket),
+        style: config.textStyle.copyWith(color: config.colors.bracket),
       ),
-    );
-
-    return _withGuides(widget.depth, config, content);
+    ).withIndentGuides(widget.depth, config);
   }
 }
 
@@ -335,6 +373,7 @@ class _CollapsibleNodeState extends State<_CollapsibleNode> {
 
 class _LeafNode extends StatelessWidget {
   const _LeafNode({
+    super.key,
     required this.nodeKey,
     required this.value,
     required this.depth,
@@ -351,28 +390,26 @@ class _LeafNode extends StatelessWidget {
     final config = _ConfigScope.of(context);
     final comma = isLast ? '' : ',';
 
-    final content = Padding(
+    return Padding(
       padding: EdgeInsets.only(left: depth * config.indentWidth + 18),
       child: Text.rich(
         TextSpan(
           children: [
             if (nodeKey != null) ...[
               TextSpan(
-                text: '"$nodeKey"',
-                style: config._baseStyle.copyWith(color: config.colors.key),
+                text: jsonEncode(nodeKey),
+                style: config.textStyle.copyWith(color: config.colors.key),
               ),
               TextSpan(
                 text: ': ',
-                style: config._baseStyle.copyWith(color: config.colors.bracket),
+                style: config.textStyle.copyWith(color: config.colors.bracket),
               ),
             ],
             _valueSpan(config, comma),
           ],
         ),
       ),
-    );
-
-    return _withGuides(depth, config, content);
+    ).withIndentGuides(depth, config);
   }
 
   TextSpan _valueSpan(_ConfigScope config, String comma) {
@@ -380,13 +417,13 @@ class _LeafNode extends StatelessWidget {
     if (value is Map) {
       return TextSpan(
         text: '{ }$comma',
-        style: config._baseStyle.copyWith(color: config.colors.bracket),
+        style: config.textStyle.copyWith(color: config.colors.bracket),
       );
     }
     if (value is List) {
       return TextSpan(
         text: '[ ]$comma',
-        style: config._baseStyle.copyWith(color: config.colors.bracket),
+        style: config.textStyle.copyWith(color: config.colors.bracket),
       );
     }
 
@@ -394,7 +431,7 @@ class _LeafNode extends StatelessWidget {
     if (value == null) {
       return TextSpan(
         text: 'null$comma',
-        style: config._baseStyle.copyWith(
+        style: config.textStyle.copyWith(
           color: config.colors.nullValue,
           fontWeight: FontWeight.w600,
         ),
@@ -405,7 +442,7 @@ class _LeafNode extends StatelessWidget {
     if (value is bool) {
       return TextSpan(
         text: '$value$comma',
-        style: config._baseStyle.copyWith(
+        style: config.textStyle.copyWith(
           color: config.colors.boolean,
           fontWeight: FontWeight.w600,
         ),
@@ -416,14 +453,15 @@ class _LeafNode extends StatelessWidget {
     if (value is num) {
       return TextSpan(
         text: '$value$comma',
-        style: config._baseStyle.copyWith(color: config.colors.number),
+        style: config.textStyle.copyWith(color: config.colors.number),
       );
     }
 
     // String
+    // Use jsonEncode for proper escaping of special characters
     return TextSpan(
-      text: '"$value"$comma',
-      style: config._baseStyle.copyWith(color: config.colors.string),
+      text: '${jsonEncode(value)}$comma',
+      style: config.textStyle.copyWith(color: config.colors.string),
     );
   }
 }
@@ -449,19 +487,21 @@ class _ArrowIcon extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Indent guides – vertical ruler lines for each nesting level
+// _IndentGuidesExtension – adds indent guides to the widget
 // ---------------------------------------------------------------------------
+extension _IndentGuidesExtension on Widget {
+  Widget withIndentGuides(int depth, _ConfigScope config) {
+    if (depth <= 0) return this;
 
-Widget _withGuides(int depth, _ConfigScope config, Widget child) {
-  if (depth <= 0) return child;
-  return CustomPaint(
-    painter: _IndentGuidesPainter(
-      depth: depth,
-      indentWidth: config.indentWidth,
-      color: config.colors.icon.withValues(alpha: 0.2),
-    ),
-    child: child,
-  );
+    return CustomPaint(
+      painter: _IndentGuidesPainter(
+        depth: depth,
+        indentWidth: config.indentWidth,
+        color: config.colors.icon.withValues(alpha: 0.2),
+      ),
+      child: this,
+    );
+  }
 }
 
 class _IndentGuidesPainter extends CustomPainter {
@@ -482,8 +522,7 @@ class _IndentGuidesPainter extends CustomPainter {
       ..strokeWidth = 1;
 
     for (int i = 1; i <= depth; i++) {
-      // Position guide in the gap between previous level's content and this level's arrow
-      final x = i * indentWidth - indentWidth / 4;
+      final x = i * indentWidth - 2;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
   }
@@ -491,5 +530,13 @@ class _IndentGuidesPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _IndentGuidesPainter old) {
     return depth != old.depth || indentWidth != old.indentWidth || color != old.color;
+  }
+}
+
+void safeTry(Function() fn) {
+  try {
+    fn();
+  } catch (e) {
+    // ignore: avoid_print
   }
 }

@@ -1,0 +1,16 @@
+name: json_visualizer_example
+description: Examples for json_visualizer package.
+publish_to: none
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  json_visualizer:
+    path: ../
+
+flutter:
+  uses-material-design: true

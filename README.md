@@ -1,39 +1,65 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# JSON Visualizer
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+A Flutter widget for displaying JSON data as an interactive tree view with syntax highlighting, expand/collapse, and copy-to-clipboard.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## Screenshots
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+| All Value Types | Copy Node |
+|:-:|:-:|
+| ![All types](screenshots/all_type.png) | ![Deep nesting](screenshots/deep_nesting.png) |
+
+| Custom Theme | Deep Nesting |
+|:-:|:-:|
+| ![Custom theme](screenshots/custom_theme.png) | ![Copy node](screenshots/copy_node.png) |
 
 ## Features
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+- Expand/collapse nodes with animated transitions
+- Syntax highlighting (keys, strings, numbers, booleans, null)
+- Easily customize theme and layout
+- Copy any node's JSON to clipboard
+- Lazy rendering with pagination for large collections (100+ items)
+- Indent guide lines for nested levels
 
 ## Getting started
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+```yaml
+dependencies:
+  json_visualizer: ^0.0.1
+```
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
 ```dart
-const like = 'sample';
+import 'package:json_visualizer/json_visualizer.dart';
+
+// Basic
+JsonVisualizer(
+  data: {'name': 'Alice', 'age': 25, 'active': true},
+)
+
+// From raw JSON string
+JsonVisualizer(
+  data: '{"name":"Alice","scores":[95,87,92]}',
+)
+
+// Full customization
+JsonVisualizer(
+  data: myJsonData,
+  expandDepth: 2,
+  fontSize: 14,
+  indentWidth: 20,
+  colors: JsonVisualizerColors(
+    key: Color(0xFF9CDCFE),
+    string: Color(0xFFCE9178),
+    number: Color(0xFFB5CEA8),
+    boolean: Color(0xFF569CD6),
+    nullValue: Color(0xFF569CD6),
+    bracket: Color(0xFFD4D4D4),
+    icon: Color(0xFF6A737D),
+  ),
+  onCopied: () => print('Copied!'), // null to hide copy buttons
+)
 ```
 
-## Additional information
-
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+See [`example/`](example/) for all use cases.
