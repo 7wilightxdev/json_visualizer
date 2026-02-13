@@ -1,5 +1,5 @@
 name: json_visualizer
-description: "A Flutter package for visualizing JSON data."
+description: A Flutter package for visualizing JSON data.
 homepage: https://github.com/7wilightxdev/json_visualizer
 repository: https://github.com/7wilightxdev/json_visualizer
 version: 0.0.1
