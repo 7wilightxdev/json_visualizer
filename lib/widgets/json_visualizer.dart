@@ -37,10 +37,19 @@ class JsonVisualizer extends StatelessWidget {
     this.onCopied,
   });
 
+  /// The JSON data to display. Can be a Map, List, String (JSON encoded), or any primitive value.
   final dynamic data;
+
+  /// Color palette for syntax highlighting. Defaults to [JsonVisualizerColors].
   final JsonVisualizerColors colors;
+
+  /// Number of nesting levels to expand by default. Defaults to 1.
   final int expandDepth;
+
+  /// Font size for all text elements. Defaults to 16.0.
   final double fontSize;
+
+  /// Width in pixels for each indentation level. Defaults to 24.0.
   final double indentWidth;
 
   /// Called after a node's JSON is copied to clipboard.

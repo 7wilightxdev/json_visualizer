@@ -1,3 +1,6 @@
+## 0.0.2
+- Added documentation for the widget
+
 ## 0.0.1
 
 - `JsonVisualizerView` widget with expand/collapse tree view
